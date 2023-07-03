@@ -11,6 +11,6 @@ WRITEDIR=/tmp/aeld-data
 username=$(cat conf/username.txt)
 
 echo "Removing the old writer utility and compiling as a native application"
-make clean
-make
+#make clean
+#make
 ./writer $WRITEDIR $WRITESTR

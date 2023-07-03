@@ -1,4 +1,10 @@
 #include "systemcalls.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +22,13 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    return system(cmd) == 0;
+}
 
-    return true;
+bool is_absolute_path(const char* path)
+{
+    bool status = (path != NULL && path[0] == '/');
+    return status;
 }
 
 /**
@@ -45,24 +56,44 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
-
+    pid_t pid = fork();
+    if(pid == -1){
+        return false;
+    }
+    else if(pid == 0){
+        if (count == 2 && !is_absolute_path(command[0]))
+        {
+            perror("Command should be specified with an absolute path.\n");
+            return false;
+        }
+        if (count == 3 && !is_absolute_path(command[0]) && !is_absolute_path(command[2]))
+        {
+            perror("Command should be specified with an absolute path.\n");
+            return false;
+        }
+        execv(command[0], command);
+        //execv only returns if an error occurred
+        return false;
+    }
+    else{
+        int status;
+        waitpid(pid, &status, 0);
+        if (count == 2 && !is_absolute_path(command[0]))
+        {
+            perror("Command should be specified with an absolute path.\n");
+            return false;
+        }        //check the exit status of the child process
+        if(WIFEXITED(status) && WEXITSTATUS(status) == 0){
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
     va_end(args);
-
-    return true;
 }
+
 
 /**
 * @param outputfile - The full path to the file to write with command output.
@@ -80,20 +111,32 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
-
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { perror("open"); abort(); }
+    pid_t pid = fork();
+    if(pid == -1){
+        perror("fork"); abort();
+        return false;
+    }
+    else if(pid == 0){
+        if (dup2(fd, 1) < 0) { perror("dup2"); abort(); }
+        execv(command[0], command);
+        perror("fork"); abort();
+        //execv only returns if an error occurred
+        return false;
+    }
+    else{
+        int status;
+        waitpid(pid, &status, 0);
+        close(fd);
+        //check the exit status of the child process
+        if(WIFEXITED(status) && WEXITSTATUS(status) == 0){
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
     va_end(args);
-
     return true;
 }
